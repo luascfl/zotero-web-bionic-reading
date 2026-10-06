@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bionic Reading no Zotero Web Canvas
 // @namespace    zotero-web-bionic-canvas
-// @version      1.0.4
+// @version      1.0.5
 // @description  Aplica Bionic Reading ao texto renderizado no PDF do Zotero Web
 // @author       Lucas Camilo Carvalho
 // @icon         https://www.zotero.org/support/_media/logo/zotero_512x512x32.png
@@ -36,9 +36,9 @@
   const originalFillText =
     CanvasRenderingContext2D.prototype.fillText;
 
-  window.__bionicOriginalFillText = originalFillText;
+  const originalStrokeText =
+    CanvasRenderingContext2D.prototype.strokeText;
 
-  // Mantém um estado independente para cada canvas.
   const estadosPorCanvas = new WeakMap();
 
   function obterEstado(contexto) {
@@ -60,26 +60,42 @@
     return /^\s*$/.test(texto);
   }
 
-  function fonteComNegrito(fonte) {
-    if (typeof fonte !== 'string' || !fonte.trim()) {
-      return fonte;
+  function deveDestacar(contexto, texto) {
+    if (typeof texto !== 'string') {
+      return false;
     }
 
-    // Evita adicionar bold duas vezes.
-    if (/\bbold\b/i.test(fonte)) {
-      return fonte;
+    const estado = obterEstado(contexto);
+
+    if (ehEspaco(texto)) {
+      estado.inicioDaPalavra = true;
+      estado.letrasDestacadas = 0;
+      return false;
     }
 
-    /*
-     * Adiciona bold sem analisar o nome da fonte.
-     *
-     * Exemplos aceitos:
-     *   10px serif
-     *   9.8px sans-serif
-     *   normal 10px "g_d0_f1"
-     *   italic 9px monospace
-     */
-    return `bold ${fonte}`;
+    if (estado.inicioDaPalavra) {
+      estado.inicioDaPalavra = false;
+      estado.letrasDestacadas = 0;
+    }
+
+    const limite = 2;
+
+    if (estado.letrasDestacadas >= limite) {
+      return false;
+    }
+
+    estado.letrasDestacadas += texto.length;
+    return true;
+  }
+
+  function deslocamentoParaFonte(contexto) {
+    const tamanho = Number.parseFloat(contexto.font);
+
+    if (!Number.isFinite(tamanho) || tamanho <= 0) {
+      return 0.35;
+    }
+
+    return Math.max(0.25, Math.min(0.8, tamanho * 0.035));
   }
 
   CanvasRenderingContext2D.prototype.fillText = function(
@@ -88,7 +104,9 @@
     y,
     largura
   ) {
-    if (typeof texto !== 'string') {
+    const destacar = deveDestacar(this, texto);
+
+    if (!destacar) {
       return originalFillText.call(
         this,
         texto,
@@ -98,33 +116,9 @@
       );
     }
 
-    const estado = obterEstado(this);
+    const deslocamento = deslocamentoParaFonte(this);
 
-    this.save();
-
-    if (ehEspaco(texto)) {
-      estado.inicioDaPalavra = true;
-      estado.letrasDestacadas = 0;
-    } else {
-      if (estado.inicioDaPalavra) {
-        estado.inicioDaPalavra = false;
-        estado.letrasDestacadas = 0;
-      }
-
-      /*
-       * Destaca os dois primeiros caracteres de cada palavra.
-       * Como o PDF.js normalmente chama fillText caractere por caractere,
-       * o estado é acumulado até atingir esse limite.
-       */
-      const limite = 2;
-
-      if (estado.letrasDestacadas < limite) {
-        this.font = fonteComNegrito(this.font);
-        estado.letrasDestacadas += texto.length;
-      }
-    }
-
-    const resultado = originalFillText.call(
+    originalFillText.call(
       this,
       texto,
       x,
@@ -132,10 +126,51 @@
       largura
     );
 
-    this.restore();
-
-    return resultado;
+    originalFillText.call(
+      this,
+      texto,
+      x + deslocamento,
+      y,
+      largura
+    );
   };
 
-  console.log(LOG, 'interceptor instalado');
+  CanvasRenderingContext2D.prototype.strokeText = function(
+    texto,
+    x,
+    y,
+    largura
+  ) {
+    const destacar = deveDestacar(this, texto);
+
+    if (!destacar) {
+      return originalStrokeText.call(
+        this,
+        texto,
+        x,
+        y,
+        largura
+      );
+    }
+
+    const deslocamento = deslocamentoParaFonte(this);
+
+    originalStrokeText.call(
+      this,
+      texto,
+      x,
+      y,
+      largura
+    );
+
+    originalStrokeText.call(
+      this,
+      texto,
+      x + deslocamento,
+      y,
+      largura
+    );
+  };
+
+  console.log(LOG, 'interceptores fillText e strokeText instalados');
 })();
