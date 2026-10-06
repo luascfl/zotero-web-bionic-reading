@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bionic Reading no Zotero Web Canvas
 // @namespace    zotero-web-bionic-canvas
-// @version      1.0.5
+// @version      1.0.3
 // @description  Aplica Bionic Reading ao texto renderizado no PDF do Zotero Web
 // @author       Lucas Camilo Carvalho
 // @icon         https://www.zotero.org/support/_media/logo/zotero_512x512x32.png
@@ -36,66 +36,13 @@
   const originalFillText =
     CanvasRenderingContext2D.prototype.fillText;
 
-  const originalStrokeText =
-    CanvasRenderingContext2D.prototype.strokeText;
+  window.__bionicOriginalFillText = originalFillText;
 
-  const estadosPorCanvas = new WeakMap();
-
-  function obterEstado(contexto) {
-    let estado = estadosPorCanvas.get(contexto);
-
-    if (!estado) {
-      estado = {
-        inicioDaPalavra: true,
-        letrasDestacadas: 0
-      };
-
-      estadosPorCanvas.set(contexto, estado);
-    }
-
-    return estado;
-  }
+  let inicioDaPalavra = true;
+  let letrasDestacadas = 0;
 
   function ehEspaco(texto) {
     return /^\s*$/.test(texto);
-  }
-
-  function deveDestacar(contexto, texto) {
-    if (typeof texto !== 'string') {
-      return false;
-    }
-
-    const estado = obterEstado(contexto);
-
-    if (ehEspaco(texto)) {
-      estado.inicioDaPalavra = true;
-      estado.letrasDestacadas = 0;
-      return false;
-    }
-
-    if (estado.inicioDaPalavra) {
-      estado.inicioDaPalavra = false;
-      estado.letrasDestacadas = 0;
-    }
-
-    const limite = 2;
-
-    if (estado.letrasDestacadas >= limite) {
-      return false;
-    }
-
-    estado.letrasDestacadas += texto.length;
-    return true;
-  }
-
-  function deslocamentoParaFonte(contexto) {
-    const tamanho = Number.parseFloat(contexto.font);
-
-    if (!Number.isFinite(tamanho) || tamanho <= 0) {
-      return 0.35;
-    }
-
-    return Math.max(0.25, Math.min(0.8, tamanho * 0.035));
   }
 
   CanvasRenderingContext2D.prototype.fillText = function(
@@ -104,21 +51,36 @@
     y,
     largura
   ) {
-    const destacar = deveDestacar(this, texto);
-
-    if (!destacar) {
-      return originalFillText.call(
-        this,
-        texto,
-        x,
-        y,
-        largura
-      );
+    if (typeof texto !== 'string') {
+      return originalFillText.call(this, texto, x, y, largura);
     }
 
-    const deslocamento = deslocamentoParaFonte(this);
+    this.save();
 
-    originalFillText.call(
+    if (ehEspaco(texto)) {
+      inicioDaPalavra = true;
+      letrasDestacadas = 0;
+    } else {
+      if (inicioDaPalavra) {
+        inicioDaPalavra = false;
+        letrasDestacadas = 0;
+      }
+
+      const limite = 2;
+
+      if (letrasDestacadas < limite) {
+        const fonteOriginal = this.font;
+
+        this.font = fonteOriginal.replace(
+          /^(\s*)(\d+(?:\.\d+)?px)/i,
+          '$1bold $2'
+        );
+
+        letrasDestacadas += texto.length;
+      }
+    }
+
+    const resultado = originalFillText.call(
       this,
       texto,
       x,
@@ -126,51 +88,10 @@
       largura
     );
 
-    originalFillText.call(
-      this,
-      texto,
-      x + deslocamento,
-      y,
-      largura
-    );
+    this.restore();
+
+    return resultado;
   };
 
-  CanvasRenderingContext2D.prototype.strokeText = function(
-    texto,
-    x,
-    y,
-    largura
-  ) {
-    const destacar = deveDestacar(this, texto);
-
-    if (!destacar) {
-      return originalStrokeText.call(
-        this,
-        texto,
-        x,
-        y,
-        largura
-      );
-    }
-
-    const deslocamento = deslocamentoParaFonte(this);
-
-    originalStrokeText.call(
-      this,
-      texto,
-      x,
-      y,
-      largura
-    );
-
-    originalStrokeText.call(
-      this,
-      texto,
-      x + deslocamento,
-      y,
-      largura
-    );
-  };
-
-  console.log(LOG, 'interceptores fillText e strokeText instalados');
+  console.log(LOG, 'interceptor instalado');
 })();
