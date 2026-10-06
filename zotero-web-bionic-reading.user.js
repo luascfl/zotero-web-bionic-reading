@@ -1,100 +1,75 @@
 // ==UserScript==
 // @name         Zotero Web Bionic Reading
 // @namespace    https://github.com/luascfl/zotero-web-bionic-reading
-// @version      1.0.1
-// @description  Applies Bionic Reading-style emphasis to PDF text rendered in Zotero Web
+// @version      1.0.2
+// @description  Applies Bionic Reading-style emphasis to Zotero Web PDF text
 // @author       Lucas Camilo Carvalho
-// @icon         https://www.zotero.org/support/brand/icon1024.png
-// @match        https://www.zotero.org/*
-// @match        https://zotero.org/*
-// @match        https://*.zotero.org/*
-// @updateURL    https://raw.githubusercontent.com/luascfl/zotero-web-bionic-reading/main/zotero-web-bionic-reading.user.js
-// @downloadURL  https://raw.githubusercontent.com/luascfl/zotero-web-bionic-reading/main/zotero-web-bionic-reading.user.js
+// @icon         https://www.zotero.org/support/_media/logo/zotero_512x512x32.png
+// @match        https://www.zotero.org/static/*/reader/*
+// @match        https://zotero.org/static/*/reader/*
 // @run-at       document-start
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/luascfl/zotero-web-bionic-reading/main/zotero-web-bionic-reading.user.js
+// @downloadURL  https://raw.githubusercontent.com/luascfl/zotero-web-bionic-reading/main/zotero-web-bionic-reading.user.js
 // ==/UserScript==
 
-(() => {
-  'use strict';
+(function () {
+    'use strict';
 
-  const LOG_PREFIX = '[Zotero Bionic Reading]';
+    const PREFIX = '[Zotero Bionic Reading]';
 
-  console.log(LOG_PREFIX, 'Script loaded:', location.href);
+    console.log(`${PREFIX} Script loaded:`, location.href);
 
-  if (!location.href.includes('viewer.html')) {
-    console.log(LOG_PREFIX, 'Ignored document: no viewer.html in URL');
-    return;
-  }
-
-  if (window.__zoteroBionicInstalled) {
-    console.log(LOG_PREFIX, 'Interceptor already installed');
-    return;
-  }
-
-  window.__zoteroBionicInstalled = true;
-
-  const originalFillText =
-    CanvasRenderingContext2D.prototype.fillText;
-
-  window.__zoteroBionicOriginalFillText = originalFillText;
-
-  let wordStarted = true;
-  let highlightedCharacters = 0;
-
-  function isWhitespace(text) {
-    return /^\s*$/.test(text);
-  }
-
-  CanvasRenderingContext2D.prototype.fillText = function(
-    text,
-    x,
-    y,
-    maxWidth
-  ) {
-    if (typeof text !== 'string') {
-      return originalFillText.call(
-        this,
-        text,
-        x,
-        y,
-        maxWidth
-      );
+    if (!location.href.includes('/reader/pdf/web/viewer.html')) {
+        console.log(`${PREFIX} Ignored document: no PDF viewer in URL`);
+        return;
     }
 
-    this.save();
-
-    if (isWhitespace(text)) {
-      wordStarted = true;
-      highlightedCharacters = 0;
-    } else {
-      if (wordStarted) {
-        wordStarted = false;
-        highlightedCharacters = 0;
-      }
-
-      const highlightLimit = 2;
-
-      if (highlightedCharacters < highlightLimit) {
-        this.font = this.font.replace(
-          /^(\\s*)(\\d+(?:\\.\\d+)?px)/i,
-          '$1bold $2'
-        );
-
-        highlightedCharacters += text.length;
-      }
+    function emphasizeText(text) {
+        return text.replace(/\S+/g, word => {
+            const letters = [...word];
+            const split = Math.ceil(letters.length * 0.45);
+            const beginning = letters.slice(0, split).join('');
+            const ending = letters.slice(split).join('');
+            return `<b>${beginning}</b>${ending}`;
+        });
     }
 
-    const result = originalFillText.call(
-      this,
-      text,
-      x,
-      y,
-      maxWidth
-    );
+    function processTextLayer(layer) {
+        if (layer.dataset.bionicProcessed === 'true') return;
 
-    this.restore();
-    return result;
-  };
+        const spans = layer.querySelectorAll('span');
+        if (!spans.length) return;
 
-  console.log(LOG_PREFIX, 'Canvas interceptor installed');
+        let count = 0;
+
+        spans.forEach(span => {
+            if (span.dataset.bionicProcessed === 'true') return;
+
+            const text = span.textContent;
+            if (!text || !text.trim() || text.length < 2) return;
+
+            span.innerHTML = emphasizeText(text);
+            span.dataset.bionicProcessed = 'true';
+            count++;
+        });
+
+        if (count > 0) {
+            layer.dataset.bionicProcessed = 'true';
+            console.log(`${PREFIX} Processed text layer: ${count} spans`);
+        }
+    }
+
+    function scanTextLayers() {
+        document.querySelectorAll('.textLayer').forEach(processTextLayer);
+    }
+
+    const observer = new MutationObserver(scanTextLayers);
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    scanTextLayers();
+    console.log(`${PREFIX} Text-layer observer installed`);
 })();
