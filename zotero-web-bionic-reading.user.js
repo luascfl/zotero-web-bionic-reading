@@ -4,6 +4,7 @@
 // @version      1.0.0
 // @description  Applies Bionic Reading-style emphasis to PDF text rendered in Zotero Web
 // @author       Lucas Camilo Carvalho
+// @icon         https://www.zotero.org/support/brand/icon1024.png
 // @match        https://www.zotero.org/*
 // @match        https://zotero.org/*
 // @match        https://*.zotero.org/*
@@ -75,7 +76,7 @@
 
       if (highlightedCharacters < highlightLimit) {
         this.font = this.font.replace(
-          /^(\s*)(\d+(?:\.\d+)?px)/i,
+          /^(\\s*)(\\d+(?:\\.\\d+)?px)/i,
           '$1bold $2'
         );
 
