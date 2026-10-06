@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zotero Web Bionic Reading
 // @namespace    https://github.com/luascfl/zotero-web-bionic-reading
-// @version      1.0.0
+// @version      1.0.1
 // @description  Applies Bionic Reading-style emphasis to PDF text rendered in Zotero Web
 // @author       Lucas Camilo Carvalho
 // @icon         https://www.zotero.org/support/brand/icon1024.png
